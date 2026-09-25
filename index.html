@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="OVD: On-policy Verbal Distillation. Distilling reasoning from black-box teachers with verbal scores instead of token logits.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>On-policy Verbal Distillation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Google+Sans:400,500,700|Noto+Sans:400,400i,600,700|JetBrains+Mono:400,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+<style>
+:root {
+  --bg: #ffffff;
+  --ink: #1f2937;
+  --ink-2: #374151;
+  --muted: #5d6675;
+  --line: #e4e7ee;
+  --panel: #f6f7fa;
+  --panel-2: #eef1f7;
+  --link: #3d56c4;
+  --student: #2d5bd6;
+  --student-bg: #e9efff;
+  --teacher: #d9621c;
+  --teacher-bg: #fff0e5;
+  --env: #7a8292;
+  --env-bg: #f1f2f5;
+  --good: #1a8f55;
+  --bad: #d23b3b;
+  --s3: #11897a;
+  --s4: #8a92a3;
+  --btn: #1f2328;
+  --btn-ink: #ffffff;
+  --figbg: #ffffff;
+  --shadow: 0 1px 2px rgba(20,30,60,.06), 0 6px 24px rgba(20,30,60,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #101319;
+    --ink: #e6e8ef;
+    --ink-2: #cfd3dc;
+    --muted: #9aa2b1;
+    --line: #262c38;
+    --panel: #161a22;
+    --panel-2: #1c2230;
+    --link: #93a6ff;
+    --student: #7b9dff;
+    --student-bg: #1b2644;
+    --teacher: #ff9d5c;
+    --teacher-bg: #3a2416;
+    --env: #9aa2b1;
+    --env-bg: #1d222c;
+    --good: #45c985;
+    --bad: #ff6f6f;
+    --s3: #4fd0bd;
+    --s4: #7e8697;
+    --btn: #e6e8ef;
+    --btn-ink: #101319;
+    --figbg: #f4f5f8;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 24px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101319;
+  --ink: #e6e8ef;
+  --ink-2: #cfd3dc;
+  --muted: #9aa2b1;
+  --line: #262c38;
+  --panel: #161a22;
+  --panel-2: #1c2230;
+  --link: #93a6ff;
+  --student: #7b9dff;
+  --student-bg: #1b2644;
+  --teacher: #ff9d5c;
+  --teacher-bg: #3a2416;
+  --env: #9aa2b1;
+  --env-bg: #1d222c;
+  --good: #45c985;
+  --bad: #ff6f6f;
+  --s3: #4fd0bd;
+  --s4: #7e8697;
+  --btn: #e6e8ef;
+  --btn-ink: #101319;
+  --figbg: #f4f5f8;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 24px rgba(0,0,0,.25);
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15.5px;
+  line-height: 1.68;
+  padding-inline: 20px;
+  padding-block: 0 64px;
+}
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 4px; }
+
+.wrap { max-width: 880px; margin: 0 auto; }
+.wide { max-width: 1040px; margin: 0 auto; }
+
+h1, h2, h3 { font-family: "Google Sans", "Noto Sans", system-ui, sans-serif; font-weight: 500; color: var(--ink); text-wrap: balance; }
+h1 { font-size: clamp(30px, 5.2vw, 44px); line-height: 1.15; margin: 0; letter-spacing: -0.01em; }
+h1 .acr { color: var(--student); }
+h1 em { font-style: italic; font-weight: 500; }
+h2 { font-size: clamp(24px, 3.4vw, 30px); line-height: 1.25; margin: 56px 0 14px; }
+h3 { font-size: 20px; margin: 30px 0 8px; }
+
+p { margin: 0 0 14px; }
+.lede { color: var(--muted); font-size: 16px; max-width: 760px; margin: 16px auto 0; }
+
+header.hero { text-align: center; padding-top: 56px; }
+.venue { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; }
+.authors { font-family: "Google Sans", "Noto Sans", sans-serif; font-size: 19px; color: var(--link); margin-top: 18px; }
+.affil { color: var(--muted); font-size: 14px; margin-top: 4px; }
+.authors .au { white-space: nowrap; }
+.authors sup, .affil sup { font-size: .68em; margin-left: 1px; }
+.btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 20px 0 8px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; background: var(--btn); color: var(--btn-ink); border-radius: 999px; padding: 8px 18px; font-family: "Google Sans", "Noto Sans", sans-serif; font-size: 15px; border: 0; }
+.btn:hover { text-decoration: none; opacity: .88; }
+.btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); cursor: default; }
+.btn svg { width: 16px; height: 16px; }
+
+/* ---------- figure shell ---------- */
+figure { margin: 28px 0; }
+figcaption { font-size: 13.5px; color: var(--muted); line-height: 1.55; margin-top: 10px; }
+figcaption b { color: var(--ink-2); }
+.card { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 20px; }
+.figimg { background: var(--figbg); border-radius: 10px; padding: 12px; border: 1px solid var(--line); }
+.figimg img { display: block; width: 100%; height: auto; }
+
+/* ---------- hero demo ---------- */
+.demo-head { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.qline { font-size: 14px; }
+.qline code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px; background: var(--panel-2); color: var(--ink-2); padding: 2px 6px; border-radius: 4px; margin-right: 6px; }
+.slider { display: flex; align-items: center; gap: 12px; font-size: 14px; }
+.slider label { font-family: "Google Sans", "Noto Sans", sans-serif; white-space: nowrap; }
+.slider input[type=range] { width: 200px; max-width: 42vw; accent-color: var(--teacher); }
+.tau { font-family: "JetBrains Mono", monospace; font-weight: 600; min-width: 2ch; display: inline-block; text-align: right; color: var(--teacher); }
+.trace { display: grid; gap: 6px; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.5px; line-height: 1.55; }
+.seg { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start; border-radius: 8px; padding: 7px 10px; border-left: 3px solid transparent; }
+.seg.student { background: var(--student-bg); border-left-color: var(--student); }
+.seg.teacher { background: var(--teacher-bg); border-left-color: var(--teacher); }
+.seg.env { background: var(--env-bg); border-left-color: var(--env); color: var(--muted); }
+.seg .tag { color: var(--muted); }
+.seg .rej { display: block; color: var(--bad); text-decoration: line-through; text-decoration-thickness: 1px; opacity: .85; }
+.seg .new { display: block; }
+.score { font-size: 11.5px; white-space: nowrap; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; }
+.score.ok { color: var(--good); }
+.score.no { color: var(--bad); }
+.score.na { color: var(--env); border-style: dashed; }
+.demo-foot { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 14px; font-size: 13px; color: var(--muted); align-items: center; }
+.demo-foot .stat b { font-family: "JetBrains Mono", monospace; color: var(--ink); font-weight: 600; }
+.key { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.verdict { font-family: "JetBrains Mono", monospace; font-weight: 600; }
+.verdict.ok { color: var(--good); }
+.verdict.no { color: var(--bad); }
+.note { font-size: 12.5px; color: var(--muted); font-style: italic; }
+
+/* ---------- callouts ---------- */
+.callout { border-left: 4px solid var(--student); background: var(--panel); padding: 16px 20px; border-radius: 0 10px 10px 0; margin: 24px 0; }
+.callout.orange { border-left-color: var(--teacher); }
+.callout.green { border-left-color: var(--good); }
+.callout p:last-child { margin-bottom: 0; }
+.tldr b:first-child { color: var(--student); }
+
+/* ---------- charts ---------- */
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .axis { stroke: var(--muted); stroke-width: 1; }
+.chart text { fill: var(--muted); font-family: "Noto Sans", sans-serif; font-size: 11px; }
+.chart text.lab { font-size: 11.5px; fill: var(--ink-2); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 18px; height: 0; border-top: 2.5px solid; display: inline-block; }
+.legend i.dash { border-top-style: dashed; }
+.legend i.dot { border-top-style: dotted; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 720px) { .two { grid-template-columns: 1fr; } }
+.panel-title { font-family: "Google Sans", "Noto Sans", sans-serif; font-size: 14.5px; margin: 0 0 6px; color: var(--ink); }
+
+.seg-ctl { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; background: var(--panel); flex-wrap: wrap; }
+.seg-ctl button { font: inherit; font-size: 13px; border: 0; background: transparent; color: var(--muted); padding: 4px 12px; border-radius: 999px; cursor: pointer; font-family: "Google Sans", "Noto Sans", sans-serif; }
+.seg-ctl button[aria-pressed="true"] { background: var(--bg); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+
+/* memory calc */
+.calc { display: grid; gap: 14px; }
+.calc-row { display: flex; flex-wrap: wrap; gap: 10px 28px; }
+.calc-row .slider input[type=range] { accent-color: var(--student); }
+.mono { font-family: "JetBrains Mono", monospace; }
+.bars { display: grid; gap: 10px; }
+.bar { display: grid; grid-template-columns: 150px 1fr 90px; gap: 12px; align-items: center; font-size: 13.5px; }
+.bar .track { background: var(--panel-2); border-radius: 6px; height: 18px; overflow: hidden; }
+.bar .fill { height: 100%; border-radius: 6px; transition: width .35s ease; min-width: 2px; }
+.bar .v { font-family: "JetBrains Mono", monospace; font-size: 12.5px; text-align: right; }
+@media (max-width: 520px) { .bar { grid-template-columns: 96px 1fr 70px; font-size: 12.5px; } }
+
+/* tables */
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+thead th { font-family: "Google Sans", "Noto Sans", sans-serif; font-weight: 500; color: var(--ink-2); background: var(--panel); }
+thead tr.grp th { font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); text-align: center; }
+tbody tr:last-child td { border-bottom: 0; }
+tr.sep td { border-top: 2px solid var(--line); }
+tr.ours td { background: var(--student-bg); }
+tr.ours td:first-child { font-weight: 600; color: var(--student); }
+td.best { font-weight: 700; color: var(--ink); }
+td.avg, th.avg { border-left: 1px solid var(--line); }
+
+/* equations */
+.eq { overflow-x: auto; overflow-y: hidden; padding: 6px 0; margin: 10px 0 16px; }
+.eq-label { font-size: 12.5px; color: var(--muted); }
+
+/* prompt card */
+.prompt { font-family: "JetBrains Mono", monospace; font-size: 12.5px; line-height: 1.6; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.prompt .ph { background: var(--panel-2); padding: 8px 14px; font-family: "Google Sans", "Noto Sans", sans-serif; font-size: 14px; color: var(--ink); border-bottom: 1px solid var(--line); }
+.prompt .pb { padding: 12px 14px; }
+.prompt .rub { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; margin: 10px 0; }
+.prompt .rub span:nth-child(odd) { font-weight: 600; }
+
+ul.contrib { padding-left: 20px; }
+ul.contrib li { margin-bottom: 8px; }
+
+pre.bib { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; font-family: "JetBrains Mono", monospace; font-size: 12.5px; overflow-x: auto; color: var(--ink-2); margin: 0; }
+.bibwrap { position: relative; }
+.copy { position: absolute; top: 10px; right: 10px; font: inherit; font-size: 12px; background: var(--bg); color: var(--ink-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+
+footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); text-align: center; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+</head>
+<body>
+<header class="hero wrap">
+  <div class="venue">arXiv 2601.21968 · cs.CL</div>
+  <h1><span class="acr">OVD</span>: On-policy Verbal Distillation</h1>
+  <p class="lede">Distill from a teacher you can only <em>talk</em> to. The teacher gives each step of the student's own rollout a score from 0 to 9. OVD keeps the steps that score well and asks the teacher to rewrite the rest. No teacher logits, no dense vocabulary tensors, and the student still explores its own trajectories.</p>
+  <div class="authors"><span class="au">Jing Xiong<sup>1</sup></span>, <span class="au">Hui Shen<sup>1</sup></span>, <span class="au">Shansan Gong<sup>1</sup></span>, <span class="au">Yuxin Cheng<sup>1</sup></span>, <span class="au">Jianghan Shen<sup>2</sup></span>, <span class="au">Chaofan Tao<sup>3</sup></span>, <span class="au">Haochen Tan<sup>3</sup></span>, <span class="au">Haoli Bai<sup>3</sup></span>, <span class="au">Lifeng Shang<sup>3</sup></span>, <span class="au">Ngai Wong<sup>1</sup></span></div>
+  <div class="affil"><sup>1</sup>The University of Hong Kong &nbsp; <sup>2</sup>Nanjing University &nbsp; <sup>3</sup>Huawei Technologies</div>
+  <div class="btns">
+    <a class="btn" href="https://arxiv.org/pdf/2601.21968" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Paper</a>
+    <a class="btn" href="https://arxiv.org/abs/2601.21968" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l16 16M20 4L4 20"/></svg>arXiv</a>
+    <span class="btn ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>Code (coming soon)</span>
+    <a class="btn" href="#bibtex"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/></svg>BibTeX</a>
+  </div>
+</header>
+
+<section class="wide">
+  <figure>
+    <div class="card">
+      <div class="demo-head">
+        <div class="qline"><code>Web Q&amp;A</code>Who was the British monarch when the host city of the 2012 Summer Olympics first hosted the Games? <span class="note">Gold answer: Edward VII. Search budget: 4 calls.</span></div>
+        <div class="slider">
+          <label for="tau">Training threshold τ<sub>tr</sub></label>
+          <input id="tau" type="range" min="0" max="10" step="1" value="5">
+          <span class="tau" id="tauv">5</span>
+        </div>
+      </div>
+      <div class="trace" id="trace" aria-live="polite"></div>
+      <div class="demo-foot">
+        <span class="key"><span class="sw" style="background:var(--student)"></span>Student tokens (<span class="mono">m<sup>S</sup>=1</span>)</span>
+        <span class="key"><span class="sw" style="background:var(--teacher)"></span>Teacher-rewritten query (<span class="mono">m<sup>T</sup>=1</span>)</span>
+        <span class="key"><span class="sw" style="background:var(--env)"></span>Search result (masked from the loss)</span>
+      </div>
+      <div class="demo-foot">
+        <span class="stat">Queries kept: <b id="acc">–</b></span>
+        <span class="stat">Search calls used: <b id="calls">–</b></span>
+        <span class="stat">Queries rewritten by teacher: <b id="rep">–</b></span>
+        <span class="stat">Outcome reward <span class="mono">F1(y, y*)</span>: <b id="rew">–</b></span>
+      </div>
+    </div>
+    <figcaption><b>Figure 1. Verbal rejection sampling on one student rollout.</b> Drag the threshold. In the default Web Q&amp;A setting only the <code class="mono">&lt;search&gt;</code> queries are distilled. The teacher scores each query on a 0–9 scale, and a query scoring below τ<sub>tr</sub> is replaced by one the teacher writes. The <code class="mono">&lt;think&gt;</code> steps are never scored or rewritten, so the reasoning stays the student's own. At low τ<sub>tr</sub> the student keeps its vague queries, spends the search budget on irrelevant results, and guesses wrong. At τ<sub>tr</sub>≥8 every query is the teacher's, so the student's own good queries never reach training. The middle range, including the paper's τ<sub>tr</sub>=5, keeps good student queries and repairs only the weak ones. <span class="note">This rollout and its scores are made up to show how the method works. They do not come from the experiments.</span></figcaption>
+  </figure>
+
+  <div class="wrap">
+    <div class="callout tldr">
+      <p><b>TL;DR.</b> Token-level on-policy distillation needs the teacher's full next-token distribution at every step. That is about <b>240 GB</b> of logits for 32 rollouts at 8K tokens on a Qwen2.5-7B-class vocabulary, and closed-source teachers don't expose those numbers at all. OVD replaces logit matching with <b>verbal ranking</b>. A black-box teacher scores sub-trajectories, low-scoring ones are resampled by the teacher, and the resulting mixed trajectories train the student with GRPO. On eight Web Q&amp;A benchmarks, OVD reaches <b>41.09%</b> average exact match, <b>+5.89</b> points over the strongest baseline.</p>
+    </div>
+  </div>
+</section>
+
+<main class="wrap">
+
+  <h2 id="why">Why not match the teacher's logits?</h2>
+  <p>Standard on-policy distillation (OPD) samples trajectories from the student $\pi_S$ and minimizes the reverse KL to the teacher $\pi_{\mathcal E}$, one token at a time:</p>
+  <div class="eq">$$\mathrm{KL}(\pi_S\,\|\,\pi_{\mathcal E}) = \mathbb{E}\Big[\log \pi_S(x_\ell \mid q, x_{<\ell}) - \log \pi_{\mathcal E}(x_\ell \mid q, x_{<\ell})\Big].$$</div>
+  <p>This works well when you own the teacher. For long-horizon, agentic reasoning it breaks in two ways.</p>
+
+  <p>Storing dense student and teacher distributions over all $V$ tokens at every decoding step costs $\mathcal M = 1.5\cdot B\cdot N\cdot L\cdot V\cdot d_{32}$ bytes, since most stacks keep both FP32 and BF16 copies. That grows linearly in context length <em>and</em> in rollout count. Top-$k$ truncation cuts this by roughly $V/k$, but it still needs white-box access to the teacher.</p>
+
+  <figure>
+    <div class="card calc">
+      <div class="calc-row">
+        <div class="slider"><label for="memL">Context length L</label><input id="memL" type="range" min="0" max="6" step="1" value="4"><span class="mono" id="memLv">8K</span></div>
+        <div class="slider"><label for="memN">Rollouts N</label><input id="memN" type="range" min="0" max="6" step="1" value="5"><span class="mono" id="memNv">32</span></div>
+      </div>
+      <div class="bars" id="membars"></div>
+    </div>
+    <figcaption><b>Figure 2. Logit storage for one problem (B=1).</b> The calculation assumes a Qwen2.5-7B-class vocabulary (V≈152K), top-k with k=8,192, and a BF16 KV cache for reference (28 layers, 4 KV heads, head dim 128). The default, L=8K and N=32, matches the paper's Figure 1(b): about 240 GB for full-V logits against 13 GB for top-k. OVD stores no teacher logits. The teacher returns one score token per scored step.</figcaption>
+  </figure>
+
+  <p>Distilling search agents with top-1 and top-5 token-level OPD gives the pattern below. Exact match on the simulator's validation set keeps rising during training, but exact match with live search on held-out data stays far lower. Top-5 does worse than top-1 on both datasets. A denser token-level target seems to narrow the policy instead of guiding it.</p>
+
+  <figure>
+    <div class="legend" id="lg-opd"></div>
+    <div class="two">
+      <div><p class="panel-title">PopQA</p><div class="chart" id="ch-popqa"></div></div>
+      <div><p class="panel-title">HotpotQA</p><div class="chart" id="ch-hotpot"></div></div>
+    </div>
+    <figcaption><b>Figure 3. Validation EM rises while held-out EM stays low.</b> Solid lines show simulator validation EM over training. Dashed lines show held-out EM with live search. Top-5 matching (teal) ends below top-1 (orange) on held-out data.</figcaption>
+  </figure>
+
+  <h2 id="verbal">Can a teacher's verbal score stand in for its logits?</h2>
+  <p>OVD uses a <em>verbal scoring interface</em>. Given a problem $q$ and a student sub-trajectory $y$, the teacher outputs a single score token $S(y,q)\in\{0,1,\dots,9\}$. By default the score is decoded greedily, so a black-box API works. If the ten score-token logits happen to be available, the score can be sampled from them instead.</p>
+  <p>The first check is whether these scores carry signal. The teacher scores 32 fixed student prefixes for each of 128 prompts. The student then continues only from prefixes that score at least τ<sub>te</sub>, and the final answers are graded.</p>
+
+  <figure>
+    <div class="legend" id="lg-prefix"></div>
+    <div class="chart" id="ch-prefix"></div>
+    <figcaption><b>Figure 4. Verbal scores pick better prefixes.</b> This is final-answer EM from continuing the selected prefixes, compared with two baselines that select the same number of prefixes at random. The per-prompt baseline samples at random within each prompt, and the pooled baseline samples across all prompts. At τ<sub>te</sub>=8, 441 prefixes remain. Verbal selection reaches <b>61.22%</b>, against 49.06% for per-prompt random and 17.36% for pooled random. Shading shows 95% confidence intervals.</figcaption>
+  </figure>
+
+  <p>Verbal selection beats random selection even within a single prompt, so the score separates good prefixes from bad ones for the same question, beyond just flagging which questions are easy. OVD turns this signal into a sampler.</p>
+
+  <h2 id="method">Verbal rejection sampling</h2>
+  <figure>
+    <div class="figimg"><img src="pipeline.png" alt="OVD pipeline: the student produces on-policy rollouts; the teacher scores each step, accepts high-scoring ones, and resamples low-scoring ones; the resulting mixed trajectories are grouped, rewarded, and optimized with GRPO."></div>
+    <figcaption><b>Figure 5. The OVD pipeline.</b> Left: the student produces on-policy rollouts. Right: the teacher scores each step, accepts or resamples it, and the student resumes after each rewrite. The resulting mixed trajectories are grouped, rewarded against the reference answer, and optimized with GRPO.</figcaption>
+  </figure>
+
+  <p><b>Segmenting a rollout.</b> In Web Q&amp;A, the <code class="mono">&lt;think&gt;</code>, <code class="mono">&lt;search&gt;</code> and <code class="mono">&lt;information&gt;</code> tags mark natural step boundaries. Math rollouts have no tags. There OVD splits at the student's <em>maximum-entropy token</em>, a position that often marks a branch point in the reasoning.</p>
+
+  <p><b>Acceptance.</b> For a threshold $\tau$, a student proposal is accepted with probability $a_\tau(y\mid q)=\Pr[S(y,q)\ge\tau]$. With greedy scoring this is simply $\mathbf 1[S\ge\tau]$. Conditioning on acceptance reweights the student's own distribution:</p>
+  <div class="eq">$$p_{a,\tau}(y\mid q)=\frac{\pi_S(y\mid q)\,a_\tau(y\mid q)}{Z_\tau(q)},\qquad Z_\tau(q)=\mathbb{E}_{y'\sim\pi_S}\big[a_\tau(y'\mid q)\big].$$</div>
+
+  <p><b>Replacement.</b> A rejected step is resampled by the teacher. At a prefix $y_{&lt;t}$, the next step therefore comes from a two-part mixture:</p>
+  <div class="eq">$$p_{m,\tau}(s_t\mid y_{<t})=\underbrace{\pi_S(s_t\mid y_{<t})\,a_\tau(s_t\mid y_{<t})}_{\text{retained student exploration}}+\underbrace{\big(1-Z_\tau(y_{<t})\big)\,r_{\mathcal E,\tau}(s_t\mid y_{<t})}_{\text{teacher guidance}}.$$</div>
+
+  <div class="callout orange">
+    <p><b>Takeaway.</b> <i>Thresholding turns verbal ranking into acceptance. The mixture approaches a teacher-preferred target $p_T$ when acceptance tracks the density ratio $p_T/\pi_S$ and the teacher's replacements are close to the target.</i> The appendix makes this precise with total-variation bounds: $\mathrm{TV}(p_{m,\tau},p_T)\le \min\{1,\ \varepsilon+(1-Z_\tau)\eta\}$ per step, where $\varepsilon$ is the acceptance calibration error and $\eta$ the replacement error. Over a horizon of $T$ steps the per-step errors add up to at most $\sum_t\delta_t$.</p>
+  </div>
+
+  <p>Does acceptance actually track a density ratio? The paper checks against the teacher-to-student log-likelihood ratio, using $\pi_{\mathcal E}$ as a proxy for $p_T$, on 6,400 Math500 answers.</p>
+
+  <figure>
+    <div class="legend" id="lg-acc"></div>
+    <div class="chart" id="ch-acc"></div>
+    <figcaption><b>Figure 6. Acceptance rises with the teacher-to-student log-density ratio, then levels off.</b> Points are within-question-centered bin estimates, and bars are 95% question-bootstrap intervals. Raising τ from 5 to 7 lowers acceptance substantially. The pattern favors answers the teacher finds relatively likely. On its own it doesn't prove the exact proportionality condition.</figcaption>
+  </figure>
+
+  <h3>Training on mixed trajectories</h3>
+  <p>Each complete trajectory receives an outcome reward: token-F1 against the reference for Web Q&amp;A, exact match for math. Advantages are group-relative, as in GRPO. Every token records its source with $m^S_\ell$ or $m^T_\ell$ (where $m^S_\ell+m^T_\ell=1$), so the clipped objective splits cleanly:</p>
+  <div class="eq">$$\mathcal L_{\text{RL}}=\underbrace{-\mathbb{E}_m\big[m^S_\ell\, g_\ell(y)\big]}_{\text{learning from student exploration}}\;+\;\underbrace{-\mathbb{E}_m\big[m^T_\ell\, g_\ell(y)\big]}_{\text{learning from teacher guidance}},\qquad g_\ell=\min\!\big(\rho_\ell A,\ \mathrm{clip}(\rho_\ell,1\!-\!\epsilon_c,1\!+\!\epsilon_c)A\big).$$</div>
+  <p>A trajectory whose steps were all accepted contributes only the first term. The student learns from its own exploration without matching any teacher distribution. Search results are masked out of the loss.</p>
+
+  <h2 id="webqa">Results: agentic Web Q&amp;A</h2>
+  <p>The student is Qwen-2.5-3B-Base and the teacher is Qwen2.5-7B, evaluated on eight benchmarks with live search at test time. Rows labeled OVD (τ<sub>tr</sub>, τ<sub>te</sub>) also use the teacher at inference with threshold τ<sub>te</sub>. With τ<sub>te</sub>=0, the student runs alone.</p>
+
+  <figure>
+    <div class="tbl-wrap" id="tbl-webqa"></div>
+    <figcaption><b>Table 1. Web Q&amp;A exact match (%).</b> Bold marks the best score in each column. ‡ marks process-reward-model baselines. * marks token-level OPD with full-vocabulary reverse KL or its top-k approximation. † samples the test-time score from the teacher's ten-token score distribution (temperature 0.7) instead of taking the most likely score.</figcaption>
+  </figure>
+
+  <p>With matched thresholds (5, 5), sampling the score instead of decoding it greedily raises average EM from <b>39.04%</b> to <b>41.09%</b>. Sampling implements the probabilistic acceptance rule $a_\tau=\Pr[S\ge\tau]$, and a greedy score reduces it to a hard gate. Both token-level OPD baselines do worst of all the RL-trained methods here, at 14.14% and 11.51%.</p>
+
+  <h3>What should the teacher rewrite, and how often?</h3>
+  <div class="two">
+    <figure style="margin:8px 0">
+      <div class="tbl-wrap" id="tbl-target"></div>
+      <figcaption><b>Table 2. Where to apply rejection.</b> Macro-average EM with real search, (τ<sub>tr</sub>, τ<sub>te</sub>)=(5, 0), no teacher at test time.</figcaption>
+    </figure>
+    <figure style="margin:8px 0">
+      <div class="tbl-wrap" id="tbl-tte"></div>
+      <figcaption><b>Table 3. Test-time threshold.</b> Average EM with τ<sub>tr</sub>=5 fixed. A higher τ<sub>te</sub> sends more steps to the teacher at inference. Single-hop and multi-hop columns are macro-averages over the per-dataset results.</figcaption>
+    </figure>
+  </div>
+  <p>Rejecting only search queries works best on single-hop questions. Rejecting only reasoning (CoT) steps works best on multi-hop questions. A moderate training threshold matters too. Replacing every student step (τ<sub>tr</sub>=10) pushes the training mixture almost entirely toward teacher trajectories and discards student paths that might have been correct.</p>
+
+  <figure>
+    <div class="figimg"><img src="threshold_ablation.png" alt="Web Q&amp;A exact match per dataset under different training and testing rejection thresholds."></div>
+    <figcaption><b>Figure 7. Training and test thresholds.</b> Per-dataset and average EM for prompt-based teachers (dashed) and SFT-based teachers (solid) across (τ<sub>tr</sub>, τ<sub>te</sub>). A moderate τ<sub>te</sub>=5 consistently beats τ<sub>te</sub>=0 (accept everything) and τ<sub>te</sub>=10 (teacher intervenes everywhere).</figcaption>
+  </figure>
+
+  <h2 id="math">Results: tool-free math reasoning</h2>
+  <p>To separate verbal distillation from tool use, the student is Qwen2.5-Math-1.5B and the teacher is DeepSeek-R1-Distill-Qwen-7B. Three ways of repairing a low-scoring rollout are compared:</p>
+  <ul class="contrib">
+    <li><b>OVD-FR</b> (full response) resamples the whole trajectory.</li>
+    <li><b>OVD-HES</b> (high-entropy suffix) keeps the prefix up to the student's max-entropy token and resamples only the suffix.</li>
+    <li><b>OVD-RS</b> (random suffix) is a control that splits at a random position.</li>
+  </ul>
+
+  <figure>
+    <div style="display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div class="legend" id="lg-math" style="margin:0"></div>
+      <div class="seg-ctl" role="group" aria-label="Training set">
+        <button type="button" id="m-one" aria-pressed="false">One fixed problem</button>
+        <button type="button" id="m-128" aria-pressed="true">128 problems</button>
+      </div>
+    </div>
+    <div class="chart" id="ch-math"></div>
+    <figcaption><b>Figure 8. Macro-average accuracy on eight math benchmarks across checkpoints</b> (AIME24, CARP, Middle, College, Gaokao-II, MATH, MAWPS, SAT-Math). The untrained student scores 33.15%. With 128 problems, OVD-HES has the best checkpoint overall (58.32% at step 300) but declines afterward. With one problem, it peaks at step 800 (56.26%). The paper stresses that these benchmarks were selected post hoc from 23 tasks, so the gaps are descriptive. OVD-RS was run only in the 128-problem setting.</figcaption>
+  </figure>
+
+  <div class="two">
+    <figure style="margin:8px 0">
+      <p class="panel-title">Solution coverage (Pass@16)</p>
+      <div class="chart" id="ch-p16"></div>
+      <figcaption><b>Figure 9.</b> Average P@16 on ASDiv, MAWPS, TABMWP, Olympiad and AIME24 (128 problems). At step 800, OVD-HES holds 78.50%, against 76.14% for OVD-RS and 75.26% for OVD-FR.</figcaption>
+    </figure>
+    <figure style="margin:8px 0">
+      <p class="panel-title">Time per training step (s)</p>
+      <div class="chart" id="ch-time"></div>
+      <figcaption><b>Figure 10.</b> Mean seconds per step against the number of training problems, on four AMD GPUs. With 128 problems, OVD-HES is 10.2% faster per step than OVD-FR.</figcaption>
+    </figure>
+  </div>
+  <div class="legend" id="lg-hes" style="justify-content:center"></div>
+
+  <p>RL tends to concentrate probability on a narrow set of reasoning paths. Keeping the student's own prefix and repairing only the weak continuation preserves late-stage solution coverage: +3.24 P@16 over full-response resampling at step 800. Because only a suffix is regenerated, it is also cheaper.</p>
+
+  <h2 id="prompt">The whole teacher interface</h2>
+  <p>The teacher needs no fine-tuning and doesn't need to expose any probabilities. It answers one prompt with one number.</p>
+  <div class="prompt">
+    <div class="ph">Verbal scoring prompt</div>
+    <div class="pb">
+      <div><b>Problem:</b> q</div>
+      <div><b>Previous Steps:</b> s₁, s₂, …, s<sub>t−1</sub></div>
+      <div><b>Current Step:</b> s<sub>t</sub></div>
+      <div style="margin-top:8px">Rate the quality of the current reasoning step on a scale of 0–9, where:</div>
+      <div class="rub">
+        <span>0–2</span><span>Incorrect or irrelevant</span>
+        <span>3–5</span><span>Partially correct but incomplete</span>
+        <span>6–8</span><span>Correct and well-reasoned</span>
+        <span>9</span><span>Optimal step toward the solution</span>
+      </div>
+      <div><b>Output only a single number from 0 to 9.</b></div>
+    </div>
+  </div>
+
+  <h2 id="contrib">Contributions</h2>
+  <ul class="contrib">
+    <li><b>Black-box on-policy distillation.</b> OVD steers student rollouts using verbal scores and selective teacher continuations, without dense logits.</li>
+    <li><b>Distribution-approximation theory.</b> Finite-horizon total-variation bounds on how close the mixed training distribution is to a teacher-preferred target, under explicit calibration and replacement-quality assumptions.</li>
+    <li><b>Evaluation across reasoning settings.</b> Eight Web Q&amp;A benchmarks and tool-free mathematics, with the checkpoint-dependent and resampling-dependent trade-offs reported.</li>
+  </ul>
+
+  <h2 id="bibtex">BibTeX</h2>
+  <div class="bibwrap">
+    <button class="copy" type="button" id="copybib">Copy</button>
+<pre class="bib" id="bib">@article{xiong2026ovd,
+  title   = {{OVD}: On-policy Verbal Distillation},
+  author  = {Xiong, Jing and Shen, Hui and Gong, Shansan and Cheng, Yuxin and
+             Shen, Jianghan and Tao, Chaofan and Tan, Haochen and Bai, Haoli and
+             Shang, Lifeng and Wong, Ngai},
+  journal = {arXiv preprint arXiv:2601.21968},
+  year    = {2026}
+}</pre>
+  </div>
+
+  <footer>Page layout inspired by academic project pages. All numbers are taken from the paper's tables and figure sources.</footer>
+</main>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const css = (v) => `var(${v})`;
+
+  /* =============== hero: verbal rejection sampling =============== */
+  const GOLD = 'Edward VII', BUDGET = 4;
+  // Each hop lists the student's query attempts in order; the teacher's rewrite always lands on a useful result.
+  const HOPS = [
+    { attempts: [
+        { q: '2012 olympics', score: 4, info: 'The 2012 Summer Olympics featured 26 sports and 302 medal events.', useful: false },
+        { q: '2012 Summer Olympics host city', score: 9, info: 'London hosted the 2012 Summer Olympics.', useful: true } ],
+      teacher: 'host city of the 2012 Summer Olympics', tInfo: 'London hosted the 2012 Summer Olympics.',
+      retry: 'That result lists events but not the city. I’ll search again.',
+      next: 'The host was London. Next I need the year London first hosted the Games.' },
+    { attempts: [
+        { q: 'first Olympic Games held in London', score: 7, info: 'London first hosted the Summer Olympics in 1908, and again in 1948 and 2012.', useful: true } ],
+      teacher: 'year London first hosted the Olympic Games', tInfo: 'London first hosted the Summer Olympics in 1908, and again in 1948 and 2012.',
+      next: 'London first hosted in 1908. Now I need the British monarch in 1908.' },
+    { attempts: [
+        { q: 'British king', score: 3, info: 'Charles III has been King of the United Kingdom since 8 September 2022.', useful: false },
+        { q: 'British monarch in 1908', score: 8, info: 'Edward VII reigned as King of the United Kingdom from 1901 to 1910.', useful: true } ],
+      teacher: 'reigning British monarch in 1908', tInfo: 'Edward VII reigned as King of the United Kingdom from 1901 to 1910.',
+      retry: 'That is the current king, not the one in 1908.',
+      next: 'Edward VII reigned from 1901 to 1910, so he was king in 1908.' },
+  ];
+  function buildTrace(tau) {
+    const out = [];
+    let kept = 0, scored = 0, rewrites = 0, calls = 0, solved = true;
+    out.push({ role: 'student', tag: 'think', text: 'Three hops: the 2012 host city, the year it first hosted, then the British monarch in that year.', unscored: true });
+    for (const hop of HOPS) {
+      let done = false;
+      for (const at of hop.attempts) {
+        if (calls >= BUDGET) break;
+        calls++; scored++;
+        let useful, info;
+        if (at.score >= tau) {
+          kept++;
+          out.push({ role: 'student', tag: 'search', text: at.q, score: at.score, ok: true });
+          useful = at.useful; info = at.info;
+        } else {
+          rewrites++;
+          out.push({ role: 'teacher', tag: 'search', text: hop.teacher, rejected: at.q, score: at.score, ok: false });
+          useful = true; info = hop.tInfo;
+        }
+        out.push({ role: 'env', tag: 'information', text: info });
+        if (useful) { out.push({ role: 'student', tag: 'think', text: hop.next, unscored: true }); done = true; break; }
+        if (calls < BUDGET) out.push({ role: 'student', tag: 'think', text: hop.retry, unscored: true });
+      }
+      if (!done) { solved = false; break; }
+    }
+    if (!solved) out.push({ role: 'student', tag: 'think', text: 'Out of searches. George V was king around then, so I’ll guess George V.', unscored: true });
+    const answer = solved ? GOLD : 'George V';
+    out.push({ role: 'student', tag: 'answer', text: answer, final: true });
+    return { out, kept, scored, rewrites, calls, answer };
+  }
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  function renderTrace() {
+    const tau = +$('tau').value;
+    $('tauv').textContent = tau;
+    const r = buildTrace(tau);
+    $('trace').innerHTML = r.out.map((x) => {
+      const open = `<span class="tag">&lt;${x.tag}&gt;</span> `, close = ` <span class="tag">&lt;/${x.tag}&gt;</span>`;
+      let body;
+      if (x.role === 'teacher' && x.rejected) body = `<span class="rej">${open}${esc(x.rejected)}${close}</span><span class="new">${open}${esc(x.text)}${close}</span>`;
+      else body = `${open}${esc(x.text)}${close}`;
+      let badge;
+      if (x.role === 'env') badge = `<span class="score na">masked</span>`;
+      else if (x.final) badge = `<span class="score ${x.text === GOLD ? 'ok' : 'no'}">${x.text === GOLD ? '✓ correct' : '✗ wrong'}</span>`;
+      else if (x.unscored) badge = '<span></span>';
+      else badge = `<span class="score ${x.ok ? 'ok' : 'no'}">S=${x.score} ${x.ok ? '≥' : '<'} ${tau}</span>`;
+      return `<div class="seg ${x.role}"><div>${body}</div>${badge}</div>`;
+    }).join('');
+    $('acc').textContent = `${r.kept}/${r.scored}`;
+    $('rep').textContent = r.rewrites;
+    $('calls').textContent = `${r.calls}/${BUDGET}`;
+    const ok = r.answer === GOLD;
+    $('rew').innerHTML = `<span class="verdict ${ok ? 'ok' : 'no'}">${ok ? '1.0' : '0.0'}</span>`;
+  }
+  $('tau').addEventListener('input', renderTrace);
+  renderTrace();
+
+  /* =============== memory calculator =============== */
+  const Ls = [512, 1024, 2048, 4096, 8192, 16384, 32768];
+  const Ns = [1, 2, 4, 8, 16, 32, 64];
+  const V = 152064, K = 8192, KV_PER_TOK = 2 * 28 * 4 * 128 * 2;
+  const fmtK = (n) => n >= 1024 ? (n / 1024) + 'K' : String(n);
+  const fmtGB = (b) => { const g = b / 1e9; return g >= 100 ? g.toFixed(0) + ' GB' : g >= 10 ? g.toFixed(1) + ' GB' : g >= 1 ? g.toFixed(2) + ' GB' : (g * 1000).toFixed(0) + ' MB'; };
+  function renderMem() {
+    const L = Ls[+$('memL').value], N = Ns[+$('memN').value];
+    $('memLv').textContent = fmtK(L); $('memNv').textContent = N;
+    const rows = [
+      { name: 'Full-V logits', v: 1.5 * N * L * V * 4, c: '--bad' },
+      { name: 'Top-k logits', v: 1.5 * N * L * K * 4, c: '--teacher' },
+      { name: 'KV cache (ref.)', v: N * L * KV_PER_TOK, c: '--s4' },
+      { name: 'OVD teacher logits', v: 0, c: '--good', label: 'none' },
+    ];
+    const max = Math.max(...rows.map((r) => r.v));
+    $('membars').innerHTML = rows.map((r) => `<div class="bar"><span>${r.name}</span><div class="track"><div class="fill" style="width:${r.v ? Math.max(0.4, 100 * r.v / max) : 0}%;background:${css(r.c)}"></div></div><span class="v">${r.label || fmtGB(r.v)}</span></div>`).join('');
+  }
+  $('memL').addEventListener('input', renderMem);
+  $('memN').addEventListener('input', renderMem);
+  renderMem();
+
+  /* =============== line chart helper =============== */
+  const NS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function legend(id, series) {
+    $(id).innerHTML = series.map((s) => `<span><i class="${s.dash ? (s.dash === 'dot' ? 'dot' : 'dash') : ''}" style="border-top-color:${css(s.color)}"></i>${s.name}</span>`).join('');
+  }
+  function marker(g, shape, x, y, color, r) {
+    if (shape === 'square') return el('rect', { x: x - r, y: y - r, width: 2 * r, height: 2 * r, fill: css(color) }, g);
+    if (shape === 'tri') return el('path', { d: `M${x},${y - r * 1.2} L${x + r * 1.1},${y + r * 0.8} L${x - r * 1.1},${y + r * 0.8}Z`, fill: css(color) }, g);
+    return el('circle', { cx: x, cy: y, r, fill: css(color) }, g);
+  }
+  function lineChart(id, cfg) {
+    const W = cfg.w || 640, H = cfg.h || 300;
+    const m = Object.assign({ t: 12, r: 14, b: 44, l: 52 }, cfg.m || {});
+    const box = $(id); box.innerHTML = '';
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': cfg.aria || '' }, box);
+    const X = cfg.x, Y = cfg.y;
+    const tx = X.log ? (v) => Math.log(v) : (v) => v;
+    const ty = Y.log ? (v) => Math.log(v) : (v) => v;
+    const sx = (v) => m.l + (tx(v) - tx(X.min)) / (tx(X.max) - tx(X.min)) * (W - m.l - m.r);
+    const sy = (v) => H - m.b - (ty(v) - ty(Y.min)) / (ty(Y.max) - ty(Y.min)) * (H - m.t - m.b);
+    const g0 = el('g', {}, svg);
+    Y.ticks.forEach((t) => {
+      el('line', { x1: m.l, x2: W - m.r, y1: sy(t), y2: sy(t), class: 'grid' }, g0);
+      const tt = el('text', { x: m.l - 8, y: sy(t) + 4, 'text-anchor': 'end' }, g0); tt.textContent = Y.fmt ? Y.fmt(t) : t;
+    });
+    X.ticks.forEach((t) => {
+      const tt = el('text', { x: sx(t), y: H - m.b + 17, 'text-anchor': 'middle' }, g0); tt.textContent = X.fmt ? X.fmt(t) : t;
+    });
+    el('line', { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, class: 'axis' }, g0);
+    if (X.label) { const t = el('text', { x: (m.l + W - m.r) / 2, y: H - 6, 'text-anchor': 'middle', class: 'lab' }, g0); t.textContent = X.label; }
+    if (Y.label) { const t = el('text', { x: 14, y: (m.t + H - m.b) / 2, 'text-anchor': 'middle', class: 'lab', transform: `rotate(-90 14 ${(m.t + H - m.b) / 2})` }, g0); t.textContent = Y.label; }
+    cfg.series.forEach((s) => {
+      const g = el('g', {}, svg);
+      if (s.band) {
+        const up = s.band.map((p) => `${sx(p[0])},${sy(p[2])}`), lo = s.band.slice().reverse().map((p) => `${sx(p[0])},${sy(p[1])}`);
+        el('polygon', { points: up.concat(lo).join(' '), fill: css(s.color), opacity: 0.14 }, g);
+      }
+      if (s.err) s.err.forEach((p) => {
+        el('line', { x1: sx(p[0]), x2: sx(p[0]), y1: sy(p[2]), y2: sy(p[3]), stroke: css(s.color), 'stroke-width': 1.2, opacity: .7 }, g);
+      });
+      const d = s.pts.map((p, i) => `${i ? 'L' : 'M'}${sx(p[0]).toFixed(1)},${sy(p[1]).toFixed(1)}`).join(' ');
+      el('path', { d, fill: 'none', stroke: css(s.color), 'stroke-width': s.width || 2.2, 'stroke-dasharray': s.dash === 'dot' ? '2 4' : s.dash ? '6 4' : 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);
+      if (s.marker !== false) s.pts.forEach((p) => {
+        const mk = marker(g, s.marker || 'circle', sx(p[0]), sy(p[1]), s.color, s.r || 3.4);
+        const t = el('title', {}, mk); t.textContent = `${s.name}: ${X.fmt ? X.fmt(p[0]) : p[0]} → ${(Y.tip || ((v) => v))(p[1])}`;
+      });
+      if (s.endLabel) {
+        const p = s.pts[s.pts.length - 1];
+        const t = el('text', { x: sx(p[0]) + 8, y: sy(p[1]) + 4, style: `fill:${css(s.color)};font-weight:600` }, g); t.textContent = s.endLabel;
+      }
+    });
+  }
+
+  /* ---- Fig 3: OPD val vs test ---- */
+  const opdSeries = (v5, v1, t5, t1) => [
+    { name: 'Top-5 val.', color: '--s3', pts: v5 },
+    { name: 'Top-1 val.', color: '--teacher', pts: v1, marker: 'square' },
+    { name: 'Top-5 test', color: '--s3', dash: true, marker: false, pts: [[20, t5], [205, t5]], width: 1.6 },
+    { name: 'Top-1 test', color: '--teacher', dash: true, marker: false, pts: [[20, t1], [205, t1]], width: 1.6 },
+  ];
+  const pct = (v) => Math.round(v * 100) + '%';
+  const popS = opdSeries(
+    [[25, .196], [50, .338], [75, .474], [100, .538], [125, .524], [150, .552], [175, .544], [200, .575]],
+    [[25, .198], [50, .334], [75, .478], [100, .528], [125, .524], [150, .540], [175, .462], [200, .414]], .112, .134);
+  const hotS = opdSeries(
+    [[25, .096], [50, .210], [75, .252], [100, .352], [125, .306], [150, .406], [175, .368], [200, .398]],
+    [[25, .126], [50, .192], [75, .270], [100, .340], [125, .310], [150, .354], [175, .378], [200, .332]], .120, .132);
+  legend('lg-opd', popS);
+  const opdCfg = (series, ymax) => ({ w: 420, h: 260, m: { l: 46 }, series, x: { min: 20, max: 205, ticks: [25, 75, 125, 175], label: 'Training step' }, y: { min: 0, max: ymax, ticks: ymax > .5 ? [0, .2, .4, .6] : [0, .1, .2, .3, .4], fmt: pct, label: 'Exact match', tip: (v) => (v * 100).toFixed(1) + '%' } });
+  lineChart('ch-popqa', opdCfg(popS, .62));
+  lineChart('ch-hotpot', opdCfg(hotS, .44));
+
+  /* ---- Fig 4: prefix selection ---- */
+  const xs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+  const zip = (a) => xs.map((x, i) => [x, a[i]]);
+  const zipBand = (lo, hi) => xs.map((x, i) => [x, lo[i], hi[i]]);
+  const prefS = [
+    { name: 'Verbal-score selection', color: '--student', pts: zip([17.36, 18.48, 18.59, 18.69, 33.20, 36.81, 52.50, 60.00, 61.22, 65.94]),
+      band: zipBand([13.31, 14.20, 14.29, 14.37, 25.56, 28.41, 41.90, 48.42, 49.77, 50.00], [21.90, 23.34, 23.48, 23.64, 40.66, 44.76, 61.63, 69.49, 70.66, 78.14]) },
+    { name: 'Per-prompt random (same count)', color: '--teacher', dash: true, pts: zip([17.36, 18.00, 17.98, 18.10, 28.14, 31.02, 42.67, 48.07, 49.06, 56.84]),
+      band: zipBand([13.31, 13.74, 13.66, 13.80, 21.01, 23.25, 32.10, 36.68, 37.43, 41.73], [21.90, 22.77, 22.76, 22.93, 35.05, 38.28, 51.62, 57.12, 58.31, 67.70]) },
+    { name: 'Pooled random (same total count)', color: '--s4', dash: 'dot', marker: false, pts: [[0, 17.36], [9, 17.36]], width: 1.8 },
+  ];
+  legend('lg-prefix', prefS);
+  lineChart('ch-prefix', { w: 760, h: 300, series: prefS, x: { min: -0.3, max: 9.3, ticks: xs, label: 'Test-time verbal-score threshold τ_te' }, y: { min: 10, max: 80, ticks: [10, 20, 30, 40, 50, 60, 70, 80], label: 'Final-answer EM (%)', tip: (v) => v.toFixed(2) + '%' } });
+
+  /* ---- Fig 6: acceptance vs log ratio ---- */
+  const lx = [-1016.39, -316.08, -100.70, 18.45, 88.51, 140.44, 185.69, 237.85, 305.84, 456.39];
+  const accSer = (name, color, mk, ys, plus, minus) => ({ name, color, marker: mk, pts: lx.map((x, i) => [x, ys[i]]), err: lx.map((x, i) => [x, ys[i], ys[i] - minus[i], ys[i] + plus[i]]) });
+  const accS = [
+    accSer('τ = 3', '--student', 'circle', [.589, .6375, .7859, .8438, .8703, .8781, .8734, .8469, .8578, .8578], [.044, .042, .035, .032, .029, .032, .031, .035, .029, .035], [.046, .041, .033, .033, .032, .034, .033, .036, .031, .035]),
+    accSer('τ = 5', '--teacher', 'square', [.5797, .6344, .7797, .8344, .8672, .875, .8703, .8469, .8578, .8563], [.044, .042, .035, .032, .028, .032, .031, .035, .029, .034], [.046, .042, .034, .035, .031, .036, .033, .036, .031, .035]),
+    accSer('τ = 7', '--s3', 'tri', [.1359, .2422, .3375, .4422, .5063, .5625, .5234, .5484, .5453, .5453], [.027, .033, .045, .066, .059, .060, .056, .056, .051, .056], [.028, .032, .043, .066, .059, .064, .056, .055, .054, .055]),
+  ];
+  legend('lg-acc', accS);
+  lineChart('ch-acc', { w: 760, h: 300, series: accS, x: { min: -1080, max: 520, ticks: [-1000, -750, -500, -250, 0, 250, 500], label: 'Within-question centered log(π_E / π_S)' }, y: { min: 0, max: 1, ticks: [0, .2, .4, .6, .8, 1], fmt: (v) => v.toFixed(1), label: 'Teacher acceptance rate', tip: (v) => (v * 100).toFixed(1) + '%' } });
+
+  /* ---- Fig 8: math avg across checkpoints ---- */
+  const steps = [300, 500, 600, 800];
+  const MATH = {
+    one: [
+      { name: 'RLVR', color: '--s4', dash: 'dot', pts: [52.77, 53.11, 53.52, 54.34] },
+      { name: 'OVD-FR', color: '--teacher', dash: true, marker: 'square', pts: [52.72, 54.40, 55.41, 54.23] },
+      { name: 'OVD-HES', color: '--student', pts: [52.78, 53.64, 53.75, 56.26] },
+    ],
+    128: [
+      { name: 'RLVR', color: '--s4', dash: 'dot', pts: [56.04, 53.80, 55.48, 56.03] },
+      { name: 'OVD-FR', color: '--teacher', dash: true, marker: 'square', pts: [54.52, 55.46, 53.86, 51.88] },
+      { name: 'OVD-HES', color: '--student', pts: [58.32, 54.16, 52.94, 53.62] },
+      { name: 'OVD-RS', color: '--s3', dash: true, marker: 'tri', pts: [54.39, 54.33, 55.25, 56.19] },
+    ],
+  };
+  function renderMath(key) {
+    const ser = MATH[key].map((s) => Object.assign({}, s, { pts: s.pts.map((v, i) => [steps[i], v]) }));
+    legend('lg-math', ser);
+    lineChart('ch-math', { w: 760, h: 300, series: ser, x: { min: 270, max: 830, ticks: steps, label: 'Training step' }, y: { min: 51, max: 59, ticks: [51, 53, 55, 57, 59], label: 'Macro-avg accuracy (%)', tip: (v) => v.toFixed(2) + '%' } });
+    $('m-one').setAttribute('aria-pressed', key === 'one');
+    $('m-128').setAttribute('aria-pressed', key !== 'one');
+  }
+  $('m-one').addEventListener('click', () => renderMath('one'));
+  $('m-128').addEventListener('click', () => renderMath(128));
+  renderMath(128);
+
+  /* ---- Fig 9 / 10 ---- */
+  const hesS = (a, b, c, xsArr) => [
+    { name: 'OVD-HES', color: '--student', pts: xsArr.map((x, i) => [x, a[i]]) },
+    { name: 'OVD-FR', color: '--teacher', dash: true, marker: 'square', pts: xsArr.map((x, i) => [x, b[i]]) },
+    { name: 'OVD-RS', color: '--s3', dash: true, marker: 'tri', pts: xsArr.map((x, i) => [x, c[i]]) },
+  ];
+  const p16 = hesS([77.84, 77.22, 77.96, 78.50], [77.72, 77.20, 78.40, 75.26], [78.06, 77.20, 76.18, 76.14], steps);
+  legend('lg-hes', p16);
+  lineChart('ch-p16', { w: 420, h: 250, m: { l: 44 }, series: p16, x: { min: 270, max: 830, ticks: steps, label: 'Training step' }, y: { min: 75, max: 79, ticks: [75, 76, 77, 78, 79], label: 'Avg. P@16 (%)', tip: (v) => v.toFixed(2) + '%' } });
+  const nx = [1, 16, 32, 64, 128];
+  const tm = hesS([177.93, 313.21, 342.56, 352.05, 359.61], [169.39, 368.42, 388.68, 402.31, 400.38], [167.26, 300.04, 315.20, 332.15, 328.55], nx);
+  lineChart('ch-time', { w: 420, h: 250, m: { l: 44 }, series: tm, x: { min: -5, max: 134, ticks: nx, label: 'Number of training problems' }, y: { min: 130, max: 430, ticks: [150, 200, 250, 300, 350, 400], label: 'Seconds per step', tip: (v) => v.toFixed(1) + ' s' } });
+
+  /* =============== tables =============== */
+  function table(id, head, rows, opts) {
+    opts = opts || {};
+    const ncol = head.length;
+    const best = [];
+    for (let c = 1; c < ncol; c++) best[c] = Math.max(...rows.filter((r) => r.cells).map((r) => r.cells[c - 1]));
+    let h = '<table><thead>';
+    if (opts.groups) h += `<tr class="grp">${opts.groups.map((g) => `<th colspan="${g[1]}">${g[0]}</th>`).join('')}</tr>`;
+    h += `<tr>${head.map((x, i) => `<th class="${i === ncol - 1 && opts.avg ? 'avg' : ''}">${x}</th>`).join('')}</tr></thead><tbody>`;
+    rows.forEach((r) => {
+      h += `<tr class="${r.ours ? 'ours' : ''} ${r.sep ? 'sep' : ''}"><td>${r.name}</td>${r.cells.map((v, i) => `<td class="${v === best[i + 1] ? 'best' : ''} ${i === ncol - 2 && opts.avg ? 'avg' : ''}">${v.toFixed(opts.dp == null ? 2 : opts.dp)}</td>`).join('')}</tr>`;
+    });
+    $(id).innerHTML = h + '</tbody></table>';
+  }
+  table('tbl-webqa', ['Method', 'NQ', 'TriviaQA', 'PopQA', 'HotpotQA', '2Wiki', 'Musique', 'Bamboogle', 'GAIA', 'Avg.'], [
+    { name: 'RAG', cells: [31.60, 58.00, 15.20, 24.20, 23.20, 8.20, 15.20, 5.40, 22.63] },
+    { name: 'RA-Agent', cells: [15.20, 28.40, 6.60, 12.60, 16.60, 2.60, 13.60, 3.00, 12.33] },
+    { name: 'Search-o1', cells: [16.60, 31.00, 8.20, 14.80, 22.40, 5.20, 22.40, 2.40, 15.38] },
+    { name: 'R1', cells: [14.20, 34.80, 20.80, 19.60, 28.40, 6.40, 5.56, 1.80, 16.45] },
+    { name: 'Search-R1', cells: [40.60, 60.00, 44.20, 29.20, 32.00, 11.20, 12.50, 7.81, 29.69] },
+    { name: 'ZeroSearch', cells: [43.00, 61.60, 41.40, 33.80, 34.60, 13.00, 13.89, 7.27, 31.07] },
+    { name: 'OPD* (reverse KL)', cells: [14.40, 25.40, 13.40, 13.20, 21.60, 2.20, 8.80, 2.90, 14.14] },
+    { name: 'OPD* (top-k logits)', cells: [9.80, 20.60, 11.20, 12.00, 17.00, 3.20, 7.20, 2.50, 11.51] },
+    { name: 'SmartSearch‡', sep: true, cells: [39.80, 64.40, 41.20, 38.40, 45.40, 15.20, 28.80, 9.09, 35.20] },
+    { name: 'StepSearch‡', cells: [16.20, 28.00, 20.40, 18.20, 16.20, 3.60, 17.60, 7.27, 18.60] },
+    { name: 'OVD (5, 0)', sep: true, ours: true, cells: [49.20, 67.20, 63.20, 39.20, 35.20, 21.80, 15.20, 9.09, 37.51] },
+    { name: 'OVD (5, 5)', ours: true, cells: [47.00, 67.40, 66.40, 38.00, 37.60, 23.20, 24.80, 7.88, 39.04] },
+    { name: 'OVD† (5, 5)', ours: true, cells: [48.80, 68.00, 66.60, 39.40, 41.40, 24.20, 28.80, 11.50, 41.09] },
+  ], { avg: true, groups: [['', 1], ['Single-hop QA', 3], ['Multi-hop QA', 5], ['', 1]] });
+  table('tbl-target', ['Rejection target', 'Single', 'Multi', 'Overall'], [
+    { name: 'Query only', cells: [59.87, 24.10, 37.51] },
+    { name: 'Query + CoT', cells: [54.27, 26.53, 36.93] },
+    { name: 'CoT only', cells: [55.93, 27.02, 37.87] },
+  ]);
+  table('tbl-tte', ['τ_te', 'Single', 'Multi', 'Avg.'].map((x) => x === 'τ_te' ? 'τ<sub>te</sub>' : x), [
+    { name: '0 (student alone)', cells: [59.87, 24.10, 37.51] },
+    { name: '5', cells: [60.27, 26.30, 39.04] },
+    { name: '10', cells: [59.20, 31.58, 41.94] },
+  ]);
+
+  /* =============== bibtex copy =============== */
+  $('copybib').addEventListener('click', () => {
+    const txt = $('bib').textContent;
+    const done = () => { $('copybib').textContent = 'Copied'; setTimeout(() => ($('copybib').textContent = 'Copy'), 1500); };
+    try {
+      navigator.clipboard.writeText(txt).then(done, () => { selectBib(); });
+    } catch (e) { selectBib(); }
+  });
+  function selectBib() { const r = document.createRange(); r.selectNodeContents($('bib')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $('copybib').textContent = 'Selected — press ⌘C'; }
+})();
+</script>
+</body>
+</html>
