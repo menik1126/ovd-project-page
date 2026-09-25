@@ -378,7 +378,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
     <figcaption><b>Table 1. Web Q&amp;A exact match (%).</b> Bold marks the best score in each column. ‡ marks process-reward-model baselines. * marks token-level OPD with full-vocabulary reverse KL or its top-k approximation. † samples the test-time score from the teacher's ten-token score distribution (temperature 0.7) instead of taking the most likely score.</figcaption>
   </figure>
 
-  <p>With matched thresholds (5, 5), sampling the score instead of decoding it greedily raises average EM from <b>39.04%</b> to <b>41.09%</b>. Sampling implements the probabilistic acceptance rule $a_\tau=\Pr[S\ge\tau]$, and a greedy score reduces it to a hard gate. Both token-level OPD baselines do worst of all the RL-trained methods here, at 14.14% and 11.51%.</p>
+  <p>With matched thresholds (5, 5), sampling the score instead of decoding it greedily raises average EM from <b>39.04%</b> to <b>41.09%</b>. Sampling implements the probabilistic acceptance rule $a_\tau=\Pr[S\ge\tau]$, and a greedy score reduces it to a hard gate. The two token-level OPD baselines reach only 14.14% and 11.51% average EM.</p>
 
   <h3>What should the teacher rewrite, and how often?</h3>
   <div class="two">
@@ -395,7 +395,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
 
   <figure>
     <div class="figimg"><img src="threshold_ablation.png" alt="Web Q&amp;A exact match per dataset under different training and testing rejection thresholds."></div>
-    <figcaption><b>Figure 7. Training and test thresholds.</b> Per-dataset and average EM for prompt-based teachers (dashed) and SFT-based teachers (solid) across (τ<sub>tr</sub>, τ<sub>te</sub>). A moderate τ<sub>te</sub>=5 consistently beats τ<sub>te</sub>=0 (accept everything) and τ<sub>te</sub>=10 (teacher intervenes everywhere).</figcaption>
+    <figcaption><b>Figure 7. Training and test thresholds.</b> Per-dataset and average EM for prompt-based teachers (dashed) and SFT-based teachers (solid) across (τ<sub>tr</sub>, τ<sub>te</sub>). In this comparison the paper finds that a moderate τ<sub>te</sub>=5 outperforms τ<sub>te</sub>=0 (accept everything) and τ<sub>te</sub>=10 (teacher intervenes everywhere). In the appendix setting of Table 3 above, τ<sub>te</sub>=10 has the highest average instead.</figcaption>
   </figure>
 
   <h2 id="math">Results: tool-free math reasoning</h2>
@@ -415,7 +415,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
       </div>
     </div>
     <div class="chart" id="ch-math"></div>
-    <figcaption><b>Figure 8. Macro-average accuracy on eight math benchmarks across checkpoints</b> (AIME24, CARP, Middle, College, Gaokao-II, MATH, MAWPS, SAT-Math). The untrained student scores 33.15%. With 128 problems, OVD-HES has the best checkpoint overall (58.32% at step 300) but declines afterward. With one problem, it peaks at step 800 (56.26%). The paper stresses that these benchmarks were selected post hoc from 23 tasks, so the gaps are descriptive. OVD-RS was run only in the 128-problem setting.</figcaption>
+    <figcaption><b>Figure 8. Macro-average accuracy on eight math benchmarks across checkpoints</b> (AIME24, CARP, Middle, College, Gaokao-II, MATH, MAWPS, SAT-Math). The untrained student scores 33.15%. With 128 problems, OVD-HES has the best checkpoint overall (58.32% at step 300) but declines afterward. With one problem, it peaks at step 800 (56.26%). The paper stresses that these benchmarks were selected post hoc from 23 tasks, so the gaps are descriptive. OVD-RS results are reported only for the 128-problem setting.</figcaption>
   </figure>
 
   <div class="two">
@@ -432,7 +432,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
   </div>
   <div class="legend" id="lg-hes" style="justify-content:center"></div>
 
-  <p>RL tends to concentrate probability on a narrow set of reasoning paths. Keeping the student's own prefix and repairing only the weak continuation preserves late-stage solution coverage: +3.24 P@16 over full-response resampling at step 800. Because only a suffix is regenerated, it is also cheaper.</p>
+  <p>RL tends to concentrate probability on a narrow set of reasoning paths. Keeping the student's own prefix and repairing only the weak continuation preserves late-stage solution coverage: +3.24 P@16 over full-response resampling at step 800. With 128 training problems it is also 10.2% faster per step than OVD-FR. With a single fixed problem, OVD-FR is the fastest.</p>
 
   <h2 id="prompt">The whole teacher interface</h2>
   <p>The teacher needs no fine-tuning and doesn't need to expose any probabilities. It answers one prompt with one number.</p>
